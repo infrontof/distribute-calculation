@@ -1,0 +1,96 @@
+
+
+import akka.actor._
+import akka.routing.RoundRobinRouter 
+import java.lang.management._
+import scala.math
+
+  sealed trait pj1msg
+  case class Work(workID:Int,start: Int, workunit: Int, N:Int)extends pj1msg  
+  case object Calculate extends pj1msg
+  case class initalcall(N: Int, k:Int,nofworker: Int) extends pj1msg
+  case class Result(value:String,threadtime:Double) extends pj1msg
+
+  
+  object project1{
+
+     def main(args:Array[String])= {
+          
+           val N:Int=args(0).toInt
+           val k:Int=args(1).toInt
+          
+           
+           var nofworker=4
+         val workunit:Int=N/(nofworker)
+   
+        val system = ActorSystem("pingyingSystem")
+        val master = system.actorOf(Props(new Master(N,k,nofworker,workunit)),name="master")  
+        master ! Calculate
+   }
+
+class Worker extends Actor {    
+        def searchnum(bstart:Int,bend:Int,k:Int,sumN:Int) = {   
+            var acc:String=""   
+            var bbend=bend
+            if (bbend>sumN) 
+                  {bbend=sumN}  
+                   
+            for (i <- bstart to bbend)   
+            { 
+              var sqursum:Long=0
+              for(j:Int<- i until i+k){
+                var longj=j.toLong
+                var mycash:Long=longj*longj
+                 sqursum+=mycash
+                  }
+              var qq:Double=scala.math.sqrt(sqursum)            
+              if(qq %1==0)
+                acc=acc+" "+i                 
+               }     
+            acc   
+        }   
+  
+        def receive = {      
+            case Work(id,start,k,sumN)  => 
+                        var  threadstart = System.currentTimeMillis;   
+                        var acc=searchnum(start*id+1,start*(id+1),k,sumN) 
+                        var threadcputime=System.currentTimeMillis-threadstart;
+                          sender !  Result(acc,threadcputime)   
+          
+        }   
+    }   
+    class Master(N:Int,k:Int,nofworker:Int,workunit:Int) extends Actor{   
+       
+
+       var nofunit=N/workunit
+         
+        var finalresult:String=" "
+       
+        var nrOfResults:Int = 0  
+        
+        var finalsputime:Double=0
+        val workerRouter = context.actorOf(   
+            Props[Worker].withRouter(RoundRobinRouter(nofworker)),name="workers"  
+        )   
+           
+        var start:Long  = _   
+        def receive = {   
+          
+            case Calculate =>   
+                start = System.currentTimeMillis;   
+                for (workid <- 0 until nofunit)                  
+                     workerRouter ! Work(workid,workunit,k,N)   
+            case Result(value,thtime) =>   
+                  finalresult=finalresult +value 
+                 
+                 finalsputime=finalsputime+thtime  
+                 nrOfResults += 1  
+  
+                if(nrOfResults == nofunit)   
+                {   
+                    println(finalresult)   
+                    context.system.shutdown()   
+                }    
+        }   
+    }   
+}
